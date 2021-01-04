@@ -2,11 +2,13 @@ config = {
     #
     # 1. mnist: shape=(28, 28, 1)
     # 2. cifar10: shape=(32, 32, 3)
-    # 3. cars196: shape=(160, 160, 3)
+    # 3. cifar100: shape=(32, 32, 3)
+    # 4. cars196: shape=(160, 160, 3)
+    # 5. cub: shape=(160, 160, 3)
     #
-    'dataset': 'cifar10',
+    'dataset': 'cifar100',
     'model_name': 'mnist_test',
-    'batch_size' : 32,
+    'batch_size' : 64,
     'shape' : [32, 32, 3],
 
     #
@@ -20,7 +22,7 @@ config = {
     # 6. VGGVariant (only for cifar10)
     #
     'model' : 'VGGVariant',
-    'embedding_dim': 32,
+    'embedding_dim': 64,
 
     #
     # 1. ProxyNCA

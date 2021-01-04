@@ -15,17 +15,28 @@ def conv_bn_relu(x, filter):
 
 def VGGVariant(shape):
     y = x = tf.keras.Input(shape)
+    y = shortcut = conv_bn_relu(y, 32)
+    y = tf.keras.layers.Conv2D(16, (1, 1), activation='relu')(y)
     y = conv_bn_relu(y, 32)
+    y = tf.keras.layers.Conv2D(16, (1, 1), activation='relu')(y)
     y = conv_bn_relu(y, 32)
-    y = conv_bn_relu(y, 32)
+    y = y + shortcut
     y = tf.keras.layers.MaxPooling2D((2, 2))(y)
+
+    y = shortcut = conv_bn_relu(y, 64)
+    y = tf.keras.layers.Conv2D(32, (1, 1), activation='relu')(y)
     y = conv_bn_relu(y, 64)
+    y = tf.keras.layers.Conv2D(32, (1, 1))(y)
     y = conv_bn_relu(y, 64)
-    y = conv_bn_relu(y, 64)
+    y = y + shortcut
     y = tf.keras.layers.MaxPooling2D((2, 2))(y)
-    y = conv_bn_relu(y, 64)
-    y = conv_bn_relu(y, 64)
-    y = conv_bn_relu(y, 64)
+
+    y = shortcut = conv_bn_relu(y, 128)
+    y = tf.keras.layers.Conv2D(64, (1, 1), activation='relu')(y)
+    y = conv_bn_relu(y, 128)
+    y = tf.keras.layers.Conv2D(64, (1, 1), activation='relu')(y)
+    y = conv_bn_relu(y, 128)
+    y = y + shortcut
     y = tf.keras.layers.MaxPooling2D((2, 2))(y)
 
     return tf.keras.Model(x, y)

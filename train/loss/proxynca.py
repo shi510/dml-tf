@@ -22,22 +22,19 @@ def binarize_and_smooth_labels(labels, classes, smoothing_const = 0.1):
     return tf.where(binarised == 1, pos_const, neg_const)
 
 
-
 def ProxyNCALoss(classes):
     """
     pos_dist = dist(x, p(y))
-    neg_dist = sum(x, p(z))
-    loss = -log(exp(pos_dist) / sum(exp(neg_dist)))
+    neg_dist = dist(x, p(z))
+    loss = -log( exp(-pos_dist) / sum( exp(-neg_dist) ) )
     """
     def _loss_fn(labels, probs):
-        # smooth_labels = binarize_and_smooth_labels(labels, classes)
-        # loss = tf.math.reduce_mean(tf.multiply(smooth_labels, probs))
-        binarised = tf.one_hot(labels, classes)
+        binarised = tf.one_hot(labels, classes, True, False)
         probs = tf.math.exp(-1 * probs)
-        pos = tf.math.reduce_sum(tf.where(binarised == 1, probs, 0), axis=1)
-        neg = tf.math.reduce_sum(tf.where(binarised == 0, probs, 0), axis=1)
-        loss = -1 * tf.math.log(pos / neg)
-        loss = tf.where(loss > 0, loss, 0)
+        pos = tf.math.reduce_sum(tf.where(binarised, probs, 0), axis=1)
+        neg = tf.math.reduce_sum(tf.where(binarised, 0, probs), axis=1)
+        loss = -1 * tf.math.log(pos / (neg + 1e-6))
+        loss = tf.maximum(loss, 0)
         loss = tf.math.reduce_mean(loss)
         return loss
     return _loss_fn
@@ -55,19 +52,16 @@ class ProxyNCALayer(tf.keras.layers.Layer):
     def build(self, input_shape):
         self.proxies = self.add_weight(name='proxies', 
             shape=(self.classes, input_shape[-1]),
-            initializer=tf.keras.initializers.RandomNormal(stddev=0.5),
+            initializer=tf.keras.initializers.RandomNormal(stddev=1.0),
             trainable=True)
 
 
     def call(self, embeddings):
-        # print(embeddings[0][:5])
         norm_x = tf.math.l2_normalize(embeddings, axis=1)
         norm_proxies = tf.math.l2_normalize(self.proxies, axis=1)
         norm_x = norm_x * self.scale_x
         norm_proxies = norm_proxies * self.scale_p
         dist = pairwise_distance(norm_x, norm_proxies)
-        # dist = tf.math.square(dist)
-        # probs = -1 * tf.nn.log_softmax(-1*dist, axis=1)
         return dist
 
 
