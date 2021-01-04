@@ -4,7 +4,7 @@ import train.input_pipeline as input_pipeline
 import train.config
 from train.callbacks import LossTensorBoard
 import net_arch.models
-from train.loss.proxynca import ProxyNCALayer, ProxyNCALoss
+from train.loss.proxynca import ProxyNCALoss
 from train.loss.triplet import original_triplet_loss as triplet_loss
 import evalutate.nmi as nmi
 import evalutate.linear as linear_eval
@@ -37,17 +37,10 @@ def build_embedding_model(config, classes):
         y = tf.keras.layers.BatchNormalization()(y)
         return tf.keras.Model(x, y, name='embeddings')(feature)
 
-    def _proxynca_layer(feature):
-        y = x = tf.keras.Input(feature.shape[1:])
-        y = ProxyNCALayer(config['embedding_dim'], classes)(y)
-        return tf.keras.Model(x, y, name='ProxyNCA')(feature)
-
 
     y = _embedding_layer(y)
-    backbone = tf.keras.Model(x, y, name = "backbone")
-    y = _proxynca_layer(y)
 
-    return tf.keras.Model(x, y, name=config['model_name']), backbone
+    return tf.keras.Model(x, y, name=config['model_name'])
 
 
 def build_callbacks(config):
@@ -102,8 +95,8 @@ def build_optimizer(config):
 if __name__ == '__main__':
     config = train.config.config
     train_ds, test_ds, classes = build_dataset(config)
-    net, backbone = build_embedding_model(config, classes)
-    loss_fn = ProxyNCALoss(classes)
+    net = build_embedding_model(config, classes)
+    loss_fn = ProxyNCALoss(config['embedding_dim'], classes)
     opt = build_optimizer(config)
     net.summary()
     # Iterate over epochs.
@@ -117,14 +110,15 @@ if __name__ == '__main__':
                 probs = net(x)
                 total_loss = loss_fn(y, probs)
             epoch_loss += total_loss.numpy()
-            grads = tape.gradient(total_loss, net.trainable_weights)
-            opt.apply_gradients(zip(grads, net.trainable_weights))
+            all_weights = net.trainable_weights + [loss_fn.proxies]
+            grads = tape.gradient(total_loss, all_weights)
+            opt.apply_gradients(zip(grads, all_weights))
             total_iter += 1
-        nmi_score = nmi.evaluate(backbone, test_ds, config['embedding_dim'], classes)
+        nmi_score = nmi.evaluate(net, test_ds, config['embedding_dim'], classes)
         print('training loss={}'.format(epoch_loss / total_iter))
         print('test set NMI={:.3f}%'.format(nmi_score*100))
-        # mean, var = tf.nn.moments(net.trainable_weights[-1], 0)
+        # mean, var = tf.nn.moments(loss_fn.proxies, 0)
         # print('proxy mean=', mean.numpy())
         # print('proxy var=', var.numpy())
     linear_eval_opt = tf.keras.optimizers.Adam(learning_rate=1e-4)
-    linear_eval.evaluate(backbone, classes, train_ds, test_ds, linear_eval_opt)
+    linear_eval.evaluate(net, classes, train_ds, test_ds, linear_eval_opt)

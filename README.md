@@ -6,6 +6,7 @@ distance metric learning, tf2 implementation
 
 1. Convergence on MNIST dataset is good.  
 2. Convergence on CIFAR10 dataset is not good, NMI saturates at 52%.  
+    But with data augmentation, it gets about 82% accuracy on test set using linear evaluation.  
 3. Convergence on CARS196 dataset is totally not good, NMI is not improving.  
 
 ## TODO LIST

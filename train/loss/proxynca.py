@@ -15,55 +15,29 @@ def pairwise_distance(A, B):
     return row_norms_A - 2 * tf.matmul(A, tf.transpose(B)) + row_norms_B
 
 
-def binarize_and_smooth_labels(labels, classes, smoothing_const = 0.1):
-    binarised = tf.one_hot(labels, classes)
-    pos_const = 1.0 - smoothing_const
-    neg_const = smoothing_const / (classes - 1.0)
-    return tf.where(binarised == 1, pos_const, neg_const)
+class ProxyNCALoss(tf.keras.losses.Loss):
 
-
-def ProxyNCALoss(classes):
-    """
-    pos_dist = dist(x, p(y))
-    neg_dist = dist(x, p(z))
-    loss = -log( exp(-pos_dist) / sum( exp(-neg_dist) ) )
-    """
-    def _loss_fn(labels, probs):
-        binarised = tf.one_hot(labels, classes, True, False)
-        probs = tf.math.exp(-1 * probs)
-        pos = tf.math.reduce_sum(tf.where(binarised, probs, 0), axis=1)
-        neg = tf.math.reduce_sum(tf.where(binarised, 0, probs), axis=1)
-        loss = -1 * tf.math.log(pos / (neg + 1e-6))
-        loss = tf.maximum(loss, 0)
-        loss = tf.math.reduce_mean(loss)
-        return loss
-    return _loss_fn
-
-
-class ProxyNCALayer(tf.keras.layers.Layer):
-
-    def __init__(self, embedding_dim, classes, scale_x=1, scale_p=3, **kwargs):
-        super(ProxyNCALayer, self).__init__(**kwargs)
+    def __init__(self, embedding_dim, classes, scale_x=3, scale_p=3, **kwargs):
+        super(ProxyNCALoss, self).__init__(**kwargs)
         self.classes = classes
         self.scale_x = scale_x
         self.scale_p = scale_p
-
-
-    def build(self, input_shape):
-        self.proxies = self.add_weight(name='proxies', 
-            shape=(self.classes, input_shape[-1]),
-            initializer=tf.keras.initializers.RandomNormal(stddev=1.0),
+        self.proxies = tf.Variable(name='proxies',
+            initial_value=tf.random.normal((self.classes, embedding_dim)),
             trainable=True)
 
 
-    def call(self, embeddings):
-        norm_x = tf.math.l2_normalize(embeddings, axis=1)
+    def call(self, y_true, y_pred):
+        norm_x = tf.math.l2_normalize(y_pred, axis=1)
         norm_proxies = tf.math.l2_normalize(self.proxies, axis=1)
         norm_x = norm_x * self.scale_x
         norm_proxies = norm_proxies * self.scale_p
         dist = pairwise_distance(norm_x, norm_proxies)
-        return dist
-
-
-    def compute_output_shape(self, input_shape):
-        return (input_shape[0], self.classes)
+        binarised = tf.one_hot(y_true, self.classes, True, False)
+        dist = tf.math.exp(-1 * dist)
+        pos = tf.math.reduce_sum(tf.where(binarised, dist, 0), axis=1)
+        neg = tf.math.reduce_sum(tf.where(binarised, 0, dist), axis=1)
+        loss = -1 * tf.math.log(pos / (neg + 1e-6))
+        loss = tf.maximum(loss, 0)
+        loss = tf.math.reduce_mean(loss)
+        return loss

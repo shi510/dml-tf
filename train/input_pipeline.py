@@ -17,7 +17,7 @@ def random_color(x: tf.Tensor):
     return x
 
 
-def cutout(x : tf.Tensor):
+def random_cutout(x : tf.Tensor):
     const_rnd = tf.random.uniform([], 0., 1., dtype=tf.float32)
     size = tf.random.uniform([], 0, 4, dtype=tf.int32)
     size = size * 2
@@ -25,7 +25,7 @@ def cutout(x : tf.Tensor):
 
 
 def attach_augmentation(ds):
-    augmentations = [random_flip, random_color, cutout]
+    augmentations = [random_flip, random_color, random_cutout]
     for f in augmentations:
         choice = tf.random.uniform([], 0.0, 1.0)
         ds = ds.map(lambda x, label: (tf.cond(choice > 0.5, lambda: f(x), lambda: x), label),
