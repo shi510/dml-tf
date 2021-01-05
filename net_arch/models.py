@@ -1,55 +1,21 @@
-import net_arch.mobilenet_v2
-import net_arch.mobilenet_v3
-import net_arch.efficient_net
-
 import tensorflow as tf
 
-
-def conv_bn_relu(x, filter):
-    y = x
-    y = tf.keras.layers.Conv2D(filter, (3, 3), padding='same')(y)
-    y = tf.keras.layers.ReLU()(y)
-    y = tf.keras.layers.BatchNormalization()(y)
-    return y
-
-
-def VGGVariant(shape):
-    y = x = tf.keras.Input(shape)
-    y = shortcut = conv_bn_relu(y, 32)
-    y = tf.keras.layers.Conv2D(16, (1, 1), activation='relu')(y)
-    y = conv_bn_relu(y, 32)
-    y = tf.keras.layers.Conv2D(16, (1, 1), activation='relu')(y)
-    y = conv_bn_relu(y, 32)
-    y = y + shortcut
-    y = tf.keras.layers.MaxPooling2D((2, 2))(y)
-
-    y = shortcut = conv_bn_relu(y, 64)
-    y = tf.keras.layers.Conv2D(32, (1, 1), activation='relu')(y)
-    y = conv_bn_relu(y, 64)
-    y = tf.keras.layers.Conv2D(32, (1, 1))(y)
-    y = conv_bn_relu(y, 64)
-    y = y + shortcut
-    y = tf.keras.layers.MaxPooling2D((2, 2))(y)
-
-    y = shortcut = conv_bn_relu(y, 128)
-    y = tf.keras.layers.Conv2D(64, (1, 1), activation='relu')(y)
-    y = conv_bn_relu(y, 128)
-    y = tf.keras.layers.Conv2D(64, (1, 1), activation='relu')(y)
-    y = conv_bn_relu(y, 128)
-    y = y + shortcut
-    y = tf.keras.layers.MaxPooling2D((2, 2))(y)
-
-    return tf.keras.Model(x, y)
+def MobileNetV2(shape):
+    model = tf.keras.applications.MobileNetV2(
+        input_shape=shape,
+        classifier_activation=None,
+        include_top=False,
+        weights='imagenet')
+    return model
 
 
-def LENET(shape):
-    y = x = tf.keras.Input(shape)
-    y = conv_bn_relu(y, 20)
-    y = tf.keras.layers.MaxPooling2D((2, 2))(y)
-    y = conv_bn_relu(y, 40)
-    y = tf.keras.layers.MaxPooling2D((2, 2))(y)
-
-    return tf.keras.Model(x, y)
+def MobileNetV3(shape):
+    model = tf.keras.applications.MobileNetV3(
+        input_shape=shape,
+        classifier_activation=None,
+        include_top=False,
+        weights='imagenet')
+    return model
 
 
 def ResNet50V2(shape):
@@ -57,17 +23,24 @@ def ResNet50V2(shape):
         input_shape=shape,
         classifier_activation=None,
         include_top=False,
-        weights=None)
+        weights='imagenet')
+    return model
+
+
+def InceptionV3(shape):
+    model = tf.keras.applications.InceptionV3(
+        input_shape=shape,
+        classifier_activation=None,
+        include_top=False,
+        weights='imagenet')
     return model
 
 
 model_list = {
-    "MobileNetV2": net_arch.mobilenet_v2.MobileNetV2,
-    "MobileNetV3": net_arch.mobilenet_v3.MakeMobileNetV3,
-    "EfficientNetB3": net_arch.efficient_net.EfficientNetB3,
+    "MobileNetV2": MobileNetV2,
+    "MobileNetV3": MobileNetV3,
     "ResNet50": ResNet50V2,
-    "VGGVariant": VGGVariant,
-    "LENET": LENET
+    "InceptionV3": InceptionV3
 }
 
 

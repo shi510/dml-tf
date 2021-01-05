@@ -1,27 +1,22 @@
 config = {
     #
-    # 1. mnist: shape=(28, 28, 1)
-    # 2. cifar10: shape=(32, 32, 3)
-    # 3. cifar100: shape=(32, 32, 3)
-    # 4. cars196: shape=(160, 160, 3)
-    # 5. cub: shape=(160, 160, 3)
+    # 1. cars196: shape=(224, 224, 3)
+    # 2. cub: shape=(224, 224, 3)
+    # 3. sop: shape=(224, 224, 3)
     #
-    'dataset': 'cifar100',
+    'dataset': 'cars196',
     'model_name': 'mnist_test',
     'batch_size' : 64,
-    'shape' : [32, 32, 3],
+    'shape' : [224, 224, 3],
 
     #
-    # If 'saved_model' not exsits, then it will be built with this architecture.
-    # Choose one of below: 
-    # 1. MobileNetV2
-    # 2. MobileNetV3
-    # 3. EfficientNetB3
-    # 4. ResNet50
-    # 5. LENET (only for mnist)
-    # 6. VGGVariant (only for cifar10)
+    # Choose your architecture:
+    # 1. InceptionV3
+    # 2. ResNet50
+    # 3. MobileNetV2
+    # 4. MobileNetV3
     #
-    'model' : 'VGGVariant',
+    'model' : 'InceptionV3',
     'embedding_dim': 64,
 
     #
@@ -29,13 +24,20 @@ config = {
     #
     'loss': 'ProxyNCA',
 
+    'loss_param':{
+        'ProxyNCA':{
+            'embedding_scale': 1,
+            'proxy_scale': 8
+        }
+    },
+
     #
     # There are two options.
     #  1. adam
     #  2. sgd with momentum=0.9 and nesterov=True
     #
     'optimizer' : 'adam',
-    'epoch' : 30,
+    'epoch' : 15,
 
     #
     # initial learning rate.

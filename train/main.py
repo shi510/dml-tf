@@ -17,7 +17,7 @@ def build_dataset(config):
     train_ds, test_ds, classes = input_pipeline.make_tfdataset(
         config['dataset'],
         config['batch_size'],
-        config['shape'][:2])
+        config['shape'])
     return train_ds, test_ds, classes
 
 
@@ -25,8 +25,8 @@ def build_backbone_model(config):
     return net_arch.models.get_model(config['model'], config['shape'])
 
 
-def build_embedding_model(config, classes):
-    y = x = tf.keras.Input(config['shape'])    
+def build_embedding_model(config):
+    y = x = tf.keras.Input(config['shape'])
     y = build_backbone_model(config)(y)
 
     def _embedding_layer(feature):
@@ -34,7 +34,6 @@ def build_embedding_model(config, classes):
         y = tf.keras.layers.Dropout(rate=0.5)(y)
         y = tf.keras.layers.GlobalAveragePooling2D()(y)
         y = tf.keras.layers.Dense(config['embedding_dim'])(y)
-        y = tf.keras.layers.BatchNormalization()(y)
         return tf.keras.Model(x, y, name='embeddings')(feature)
 
 
@@ -92,13 +91,29 @@ def build_optimizer(config):
     return opt_list[config['optimizer']]
 
 
+def build_loss(config):
+    loss_fn = None
+    loss_param = config['loss_param']
+    if config['loss'] == 'ProxyNCA':
+        proxy_param = loss_param['ProxyNCA']
+        embedding_scale = proxy_param['embedding_scale']
+        proxy_scale = proxy_param['proxy_scale']
+        loss_fn = ProxyNCALoss(config['embedding_dim'], classes,
+            embedding_scale, proxy_scale)
+    else:
+        raise 'The Loss -> {} is not supported.'.format(config['loss'])
+    
+    return loss_fn
+
+
 if __name__ == '__main__':
     config = train.config.config
     train_ds, test_ds, classes = build_dataset(config)
-    net = build_embedding_model(config, classes)
-    loss_fn = ProxyNCALoss(config['embedding_dim'], classes)
+    net = build_embedding_model(config)
+    loss_fn = build_loss(config)
     opt = build_optimizer(config)
     net.summary()
+
     # Iterate over epochs.
     for epoch in range(config['epoch']):
         print('Epoch %d' % epoch)

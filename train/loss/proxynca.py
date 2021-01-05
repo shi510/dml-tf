@@ -17,7 +17,7 @@ def pairwise_distance(A, B):
 
 class ProxyNCALoss(tf.keras.losses.Loss):
 
-    def __init__(self, embedding_dim, classes, scale_x=3, scale_p=3, **kwargs):
+    def __init__(self, embedding_dim, classes, scale_x=1, scale_p=3, **kwargs):
         super(ProxyNCALoss, self).__init__(**kwargs)
         self.classes = classes
         self.scale_x = scale_x
@@ -34,10 +34,15 @@ class ProxyNCALoss(tf.keras.losses.Loss):
         norm_proxies = norm_proxies * self.scale_p
         dist = pairwise_distance(norm_x, norm_proxies)
         binarised = tf.one_hot(y_true, self.classes, True, False)
+        dist = dist - tf.math.reduce_max(dist) # for numerical stability.
         dist = tf.math.exp(-1 * dist)
+        # select a distance between example and positive proxy.
         pos = tf.math.reduce_sum(tf.where(binarised, dist, 0), axis=1)
+        # select all distance summation between example and negative proxy.
         neg = tf.math.reduce_sum(tf.where(binarised, 0, dist), axis=1)
+        # negative log_softmax.
         loss = -1 * tf.math.log(pos / (neg + 1e-6))
+        # select only positive loss.
         loss = tf.maximum(loss, 0)
         loss = tf.math.reduce_mean(loss)
         return loss

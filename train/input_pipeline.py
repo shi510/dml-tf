@@ -19,7 +19,7 @@ def random_color(x: tf.Tensor):
 
 def random_cutout(x : tf.Tensor):
     const_rnd = tf.random.uniform([], 0., 1., dtype=tf.float32)
-    size = tf.random.uniform([], 0, 4, dtype=tf.int32)
+    size = tf.random.uniform([], 0, 30, dtype=tf.int32)
     size = size * 2
     return tfa.image.random_cutout(x, (size, size), const_rnd)
 
@@ -34,12 +34,13 @@ def attach_augmentation(ds):
     return ds
 
 
-def make_cars196(batch_size, input_shape):
-    train_ds, test_ds = tfds.load('cars196', split=['train', 'test'])
-
+def make_dataset(train_ds, test_ds, batch_size, input_shape, image_key='image', label_key='label'):
     def _init(data):
-        x = tf.image.resize(data['image'], input_shape)
-        return (x, data['label'])
+        x = data[image_key]
+        x = tf.image.resize(x, (256, 256))
+        x = tf.image.random_crop(x, input_shape)
+        return (x, data[label_key])
+
 
     def _transform_inputs(x, y):
         x = tf.cast(x, dtype=tf.float32) / 255.
@@ -57,98 +58,20 @@ def make_cars196(batch_size, input_shape):
     test_ds = test_ds.batch(batch_size)
     test_ds = test_ds.map(lambda img, label : _transform_inputs(img, label), num_parallel_calls=TF_AUTOTUNE)
     test_ds = test_ds.prefetch(TF_AUTOTUNE)
-    return train_ds, test_ds, 196
-
-
-def make_cub(batch_size, input_shape):
-    train_ds, test_ds = tfds.load('caltech_birds2010', split=['train', 'test'])
-
-    def _init(data):
-        x = tf.image.resize(data['image'], input_shape)
-        return (x, data['label'])
-
-
-    def _transform_inputs(x, y):
-        x = tf.cast(x, dtype=tf.float32) / 255.
-        y = tf.cast(y, dtype=tf.int32)
-        y = tf.reshape(y, (-1,))
-        return (x, y)
-
-
-    train_ds = train_ds.map(lambda data : _init(data), num_parallel_calls=TF_AUTOTUNE)
-    train_ds = train_ds.shuffle(10000)
-    train_ds = train_ds.batch(batch_size)
-    train_ds = train_ds.map(lambda img, label : _transform_inputs(img, label), num_parallel_calls=TF_AUTOTUNE)
-    train_ds = train_ds.prefetch(TF_AUTOTUNE)
-
-    test_ds = test_ds.map(lambda data : _init(data), num_parallel_calls=TF_AUTOTUNE)
-    test_ds = test_ds.batch(batch_size)
-    test_ds = test_ds.map(lambda img, label : _transform_inputs(img, label), num_parallel_calls=TF_AUTOTUNE)
-    test_ds = test_ds.prefetch(TF_AUTOTUNE)
-    return train_ds, test_ds, 200
-
-
-def make_mnist(batch_size, input_shape):
-    train_ds, test_ds = tf.keras.datasets.mnist.load_data()
-    train_ds = tf.data.Dataset.from_tensor_slices(train_ds)
-    test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
-
-    def _transform_inputs(x, y):
-        x = tf.cast(x, dtype=tf.float32) / 255.
-        y = tf.cast(y, dtype=tf.int32)
-        y = tf.reshape(y, (-1,))
-        return (x, y)
-
-    train_ds = train_ds.shuffle(10000)
-    train_ds = train_ds.batch(batch_size)
-    train_ds = train_ds.map(lambda img, label : _transform_inputs(img, label), num_parallel_calls=TF_AUTOTUNE)
-    train_ds = train_ds.prefetch(TF_AUTOTUNE)
-
-    test_ds = test_ds.batch(batch_size)
-    test_ds = test_ds.map(lambda img, label : _transform_inputs(img, label), num_parallel_calls=TF_AUTOTUNE)
-    test_ds = test_ds.prefetch(TF_AUTOTUNE)
-    return train_ds, test_ds, 10
-
-
-def make_cifar(batch_size, input_shape, classes):
-    cifar_dataset = None
-    if classes == 10:
-        cifar_dataset = tf.keras.datasets.cifar10
-    elif classes == 100:
-        cifar_dataset = tf.keras.datasets.cifar100
-
-    train_ds, test_ds = cifar_dataset.load_data()
-    train_ds = tf.data.Dataset.from_tensor_slices(train_ds)
-    test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
-
-    def _transform_inputs(x, y):
-        x = tf.cast(x, dtype=tf.float32) / 255.
-        y = tf.cast(y, dtype=tf.int32)
-        y = tf.reshape(y, (-1,))
-        return (x, y)
-
-    train_ds = train_ds.shuffle(10000)
-    train_ds = train_ds.batch(batch_size)
-    train_ds = train_ds.map(lambda img, label : _transform_inputs(img, label), num_parallel_calls=TF_AUTOTUNE)
-    train_ds = attach_augmentation(train_ds)
-    train_ds = train_ds.prefetch(TF_AUTOTUNE)
-
-    test_ds = test_ds.batch(batch_size)
-    test_ds = test_ds.map(lambda img, label : _transform_inputs(img, label), num_parallel_calls=TF_AUTOTUNE)
-    test_ds = test_ds.prefetch(TF_AUTOTUNE)
-    return train_ds, test_ds, classes
+    return train_ds, test_ds
 
 
 def make_tfdataset(dataset, batch_size, input_shape):
-    if dataset == 'cars196':
-        return make_cars196(batch_size, input_shape)
-    elif dataset == 'mnist':
-        return make_mnist(batch_size, input_shape)
-    elif dataset == 'cifar10':
-        return make_cifar(batch_size, input_shape, 10)
-    elif dataset == 'cifar100':
-        return make_cifar(batch_size, input_shape, 100)
-    elif dataset == 'cub':
-        return make_cub(batch_size, input_shape)
-    else:
-        print('dataset {} not supports.'.format(dataset))
+    dataset_list = {
+        'cars196': ('cars196', 'image', 'label', 196, ['train', 'test']),
+        'cub': ('caltech_birds2011', 'image', 'label', 200, ['train', 'test']),
+        'sop': ('StanfordOnlineProducts', 'image', 'class_id', 22634, ['train'+'test[:50%]', 'test[50%:]'])
+    }
+    if dataset not in dataset_list:
+        raise 'dataset {} not supports.'.format(dataset)
+
+    tfds_name, img_key, lb_key, classes, split = dataset_list[dataset]
+    train_ds, test_ds = tfds.load(tfds_name, split=split)
+    train_ds, test_ds = make_dataset(train_ds, test_ds, batch_size,
+        input_shape, img_key, lb_key)
+    return train_ds, test_ds, classes
