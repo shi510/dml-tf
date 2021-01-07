@@ -8,6 +8,7 @@ from train.loss.proxynca import ProxyNCALoss
 from train.loss.triplet import original_triplet_loss as triplet_loss
 import evalutate.nmi as nmi
 import evalutate.linear as linear_eval
+import evalutate.recall as recall
 
 import tensorflow as tf
 import numpy as np
@@ -117,6 +118,7 @@ if __name__ == '__main__':
     # Iterate over epochs.
     for epoch in range(config['epoch']):
         print('Epoch %d' % epoch)
+        pbar = tf.keras.utils.Progbar(len(train_ds))
         # Iterate over the batches of the dataset.
         epoch_loss = np.zeros(1, dtype=np.float32)
         total_iter = 0
@@ -129,11 +131,13 @@ if __name__ == '__main__':
             grads = tape.gradient(total_loss, all_weights)
             opt.apply_gradients(zip(grads, all_weights))
             total_iter += 1
+            pbar.update(total_iter, [('loss', total_loss.numpy())])
+        top_k = config['eval']['recall']
+        recall_top_k = recall.evaluate(net, test_ds, top_k)
+        for k, r in zip(top_k, recall_top_k):
+            print('reall @ {}: {}%'.format(k, r * 100))
+        if config['eval']['NMI']:
         nmi_score = nmi.evaluate(net, test_ds, config['embedding_dim'], classes)
-        print('training loss={}'.format(epoch_loss / total_iter))
-        print('test set NMI={:.3f}%'.format(nmi_score*100))
-        # mean, var = tf.nn.moments(loss_fn.proxies, 0)
-        # print('proxy mean=', mean.numpy())
-        # print('proxy var=', var.numpy())
-    linear_eval_opt = tf.keras.optimizers.Adam(learning_rate=1e-4)
-    linear_eval.evaluate(net, classes, train_ds, test_ds, linear_eval_opt)
+            print('NMI : {}%'.format(nmi_score))
+    # linear_eval_opt = tf.keras.optimizers.Adam(learning_rate=1e-4)
+    # linear_eval.evaluate(net, classes, train_ds, test_ds, linear_eval_opt)

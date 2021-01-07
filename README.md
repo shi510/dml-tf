@@ -17,7 +17,6 @@ python train/main.py
 4. All network should be pretrained by imagenet, `this is important.`  
    - Issue: MobileNet not converges.  
 
-
 ## Results of ProxyNCA On Test Set
 |                   | CUB         | cars196     |
 |-------------------|-------------|-------------|
@@ -32,6 +31,8 @@ python train/main.py
 | Optimizer         | Adam@1e-4   | Adam@1e-4   |
 * Linear Eval. Acc. = Freeze trained network and then attach one fully connected layer at the end of the network.  
 
+## Issues
+- SOP dataset does not converges, I'm trying to figure it out.  
 
 ## TODO LIST
 

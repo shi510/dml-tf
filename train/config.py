@@ -31,6 +31,13 @@ config = {
         }
     },
 
+    'eval':{
+        'recall':[1, 2, 4, 8],
+        # Calculating NMI is too slow.
+        # (SOP dataset takes a long time)
+        'NMI': False
+    },
+
     #
     # There are two options.
     #  1. adam
