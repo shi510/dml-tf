@@ -35,6 +35,8 @@ def attach_augmentation(ds):
 
 
 def make_dataset(train_ds, test_ds, batch_size, input_shape, image_key='image', label_key='label'):
+
+
     def _init(data):
         x = data[image_key]
         x = tf.image.resize(x, (256, 256))
@@ -48,16 +50,19 @@ def make_dataset(train_ds, test_ds, batch_size, input_shape, image_key='image', 
         y = tf.reshape(y, (-1,))
         return (x, y)
 
-    train_ds = train_ds.shuffle(10000)
-    train_ds = train_ds.map(lambda data : _init(data), num_parallel_calls=TF_AUTOTUNE)
-    train_ds = train_ds.batch(batch_size)
-    train_ds = train_ds.map(lambda img, label : _transform_inputs(img, label), num_parallel_calls=TF_AUTOTUNE)
-    train_ds = train_ds.prefetch(TF_AUTOTUNE)
 
-    test_ds = test_ds.map(lambda data : _init(data), num_parallel_calls=TF_AUTOTUNE)
-    test_ds = test_ds.batch(batch_size)
-    test_ds = test_ds.map(lambda img, label : _transform_inputs(img, label), num_parallel_calls=TF_AUTOTUNE)
-    test_ds = test_ds.prefetch(TF_AUTOTUNE)
+    def _common_map(ds, batch):
+        ds = ds.map(lambda data : _init(data), num_parallel_calls=TF_AUTOTUNE)
+        ds = ds.batch(batch)
+        ds = ds.map(lambda img, label : _transform_inputs(img, label), num_parallel_calls=TF_AUTOTUNE)
+        ds = ds.prefetch(TF_AUTOTUNE)
+        return ds
+
+
+    train_ds = train_ds.shuffle(10000)
+    train_ds = _common_map(train_ds, batch_size)
+    train_ds = attach_augmentation(train_ds)
+    test_ds = _common_map(test_ds, batch_size)
     return train_ds, test_ds
 
 
@@ -65,7 +70,7 @@ def make_tfdataset(dataset, batch_size, input_shape):
     dataset_list = {
         'cars196': ('cars196', 'image', 'label', 196, ['train', 'test']),
         'cub': ('caltech_birds2011', 'image', 'label', 200, ['train', 'test']),
-        'sop': ('StanfordOnlineProducts', 'image', 'class_id', 22634, ['train'+'test[:50%]', 'test[50%:]'])
+        'sop': ('StanfordOnlineProducts', 'image', 'class_id', 11318, ['train', 'test'])
     }
     if dataset not in dataset_list:
         raise 'dataset {} not supports.'.format(dataset)
