@@ -115,9 +115,14 @@ if __name__ == '__main__':
     opt = build_optimizer(config)
     net.summary()
 
+    early_stop = tf.keras.callbacks.EarlyStopping(monitor='recall',
+        mode='max', patience=3, restore_best_weights=True)
+    early_stop.set_model(net)
+    early_stop.on_train_begin()
     # Iterate over epochs.
     for epoch in range(config['epoch']):
         print('Epoch %d' % epoch)
+        early_stop.on_epoch_begin(epoch)
         pbar = tf.keras.utils.Progbar(len(train_ds))
         # Iterate over the batches of the dataset.
         epoch_loss = np.zeros(1, dtype=np.float32)
@@ -135,9 +140,20 @@ if __name__ == '__main__':
         top_k = config['eval']['recall']
         recall_top_k = recall.evaluate(net, test_ds, top_k)
         for k, r in zip(top_k, recall_top_k):
-            print('reall @ {}: {}%'.format(k, r * 100))
+            print('reall @ {}: {:.2f}%'.format(k, r * 100))
         if config['eval']['NMI']:
         nmi_score = nmi.evaluate(net, test_ds, config['embedding_dim'], classes)
-            print('NMI : {}%'.format(nmi_score))
-    # linear_eval_opt = tf.keras.optimizers.Adam(learning_rate=1e-4)
-    # linear_eval.evaluate(net, classes, train_ds, test_ds, linear_eval_opt)
+            print('NMI      : {:.2f}%'.format(nmi_score * 100))
+        early_stop.on_epoch_end(epoch, {'recall': np.sum(recall_top_k)})
+        if net.stop_training:
+            break
+    early_stop.on_train_end()
+    # if NMI evaluation is False, then it is only executed at the end of the training.
+    if not config['eval']['NMI']:
+        nmi_score = nmi.evaluate(net, test_ds, config['embedding_dim'], classes)
+        print('NMI      : {:.2f}%'.format(nmi_score * 100))
+    if config['eval']['linear']:
+        linear_eval_opt = tf.keras.optimizers.Adam(learning_rate=1e-4)
+        linear_eval.evaluate(net, classes, train_ds, test_ds, linear_eval_opt)
+    # save best model
+    net.save('{}.h5'.format(config['model_name']), include_optimizer=False)

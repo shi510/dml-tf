@@ -32,9 +32,11 @@ config = {
     },
 
     'eval':{
+        'linear': False,
         'recall':[1, 2, 4, 8],
         # Calculating NMI is too slow.
         # (SOP dataset takes a long time)
+        # If False, it is only executed at the end of the training.
         'NMI': False
     },
 
