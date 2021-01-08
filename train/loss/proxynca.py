@@ -28,8 +28,12 @@ class ProxyNCALoss(tf.keras.losses.Loss):
         self.classes = classes
         self.scale_x = scale_x
         self.scale_p = scale_p
+        # Training convergence is sometimes slow, starting with low recall rate.
+        #  - It may be due to initialization of proxy vectors.
+        #  - It is better to use orthogonal initializer than random normal initializer.
+        self.initializer = tf.keras.initializers.Orthogonal()
         self.proxies = tf.Variable(name='proxies',
-            initial_value=tf.random.normal((self.classes, embedding_dim)),
+            initial_value=self.initializer((self.classes, embedding_dim)),
             trainable=True)
 
 
