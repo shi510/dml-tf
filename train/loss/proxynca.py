@@ -1,25 +1,11 @@
+from train.loss.utils import pairwise_distance
+
 import tensorflow as tf
 
 """
 All the code below is referenced from :
 https://github.com/dichotomies/proxy-nca
 """
-
-def pairwise_distance(A, B):
-    """
-    (a-b)^2 = a^2 -2ab + b^2
-    A shape = (N, D)
-    B shaep = (C, D)
-    result shape = (N, C)
-    """
-    row_norms_A = tf.math.reduce_sum(tf.square(A), axis=1)
-    row_norms_A = tf.reshape(row_norms_A, [-1, 1])  # Column vector.
-
-    row_norms_B = tf.math.reduce_sum(tf.square(B), axis=1)
-    row_norms_B = tf.reshape(row_norms_B, [1, -1])  # Row vector.
-
-    return row_norms_A - 2 * tf.matmul(A, tf.transpose(B)) + row_norms_B
-
 
 class ProxyNCALoss(tf.keras.losses.Loss):
 
@@ -35,6 +21,7 @@ class ProxyNCALoss(tf.keras.losses.Loss):
         self.proxies = tf.Variable(name='proxies',
             initial_value=self.initializer((self.n_class, n_embedding)),
             trainable=True)
+        self.trainable_weights = [self.proxies]
 
 
     def call(self, y_true, y_pred):

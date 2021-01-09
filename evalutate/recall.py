@@ -1,4 +1,4 @@
-import train.loss.proxynca
+from train.loss.utils import pairwise_distance
 
 import numpy as np
 import tensorflow as tf
@@ -21,8 +21,7 @@ def evaluate(model, dataset, top_k: list, batch_size=256):
     Y = []
     # extract all embeddings in dataset.
     for batch_x, batch_y in dataset:
-        batch_pred = model(batch_x)
-        batch_pred = tf.math.l2_normalize(batch_pred, axis=1).numpy()
+        batch_pred = model(batch_x).numpy()
         for x, y in zip(batch_pred, batch_y):
             X.append(x)
             Y.append(y)
@@ -34,7 +33,7 @@ def evaluate(model, dataset, top_k: list, batch_size=256):
     max_top_k = np.max(top_k)
     # calculate top_k using batched sample for memory efficiency.
     for n, batch_x in enumerate(ds):
-        dist = train.loss.proxynca.pairwise_distance(batch_x, X)
+        dist = pairwise_distance(batch_x, X)
         max_dist = tf.math.reduce_max(dist)
         # remove self distance.
         shifted_eye = np.eye(batch_x.shape[0], X.shape[0], n * batch_x.shape[0])
