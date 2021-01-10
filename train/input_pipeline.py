@@ -1,3 +1,5 @@
+import dataset.inshop
+
 import tensorflow as tf
 import tensorflow_addons as tfa
 import tensorflow_datasets as tfds
@@ -63,20 +65,25 @@ def make_dataset(train_ds, test_ds, batch_size, input_shape, image_key='image', 
     train_ds = _common_map(train_ds, batch_size)
     train_ds = attach_augmentation(train_ds)
     test_ds = _common_map(test_ds, batch_size)
+
     return train_ds, test_ds
 
 
-def make_tfdataset(dataset, batch_size, input_shape):
+def make_tfdataset(name, batch_size, input_shape):
     dataset_list = {
         'cars196': ('cars196', 'image', 'label', 196, ['train', 'test']),
         'cub': ('caltech_birds2011', 'image', 'label', 200, ['train', 'test']),
-        'sop': ('StanfordOnlineProducts', 'image', 'class_id', 11318, ['train', 'test'])
+        'sop': ('StanfordOnlineProducts', 'image', 'class_id', 11318, ['train', 'test']),
+        'inshop': ('StanfordOnlineProducts', 'image', 'label', 3997, ['train', 'test'])
     }
-    if dataset not in dataset_list:
-        raise 'dataset {} not supports.'.format(dataset)
+    if name not in dataset_list:
+        raise 'dataset {} not supports.'.format(name)
 
-    tfds_name, img_key, lb_key, classes, split = dataset_list[dataset]
-    train_ds, test_ds = tfds.load(tfds_name, split=split)
+    tfds_name, img_key, lb_key, classes, split = dataset_list[name]
+    if name == 'inshop':
+        train_ds, test_ds = dataset.inshop.load_tfrecord()
+    else:
+        train_ds, test_ds = tfds.load(tfds_name, split=split)
     train_ds, test_ds = make_dataset(train_ds, test_ds, batch_size,
         input_shape, img_key, lb_key)
     return train_ds, test_ds, classes
