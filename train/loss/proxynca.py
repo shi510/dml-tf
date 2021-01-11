@@ -24,7 +24,17 @@ class ProxyNCALoss(tf.keras.losses.Loss):
         self.trainable_weights = [self.proxies]
 
 
+    def smooth_one_hot(self, labels, n_class, smooth_factor=0.1):
+        pos = (1. - smooth_factor)
+        neg = smooth_factor / (n_class - 1.)
+        onehot = tf.one_hot(labels, n_class, pos, neg)
+        return onehot
+
+
     def call(self, y_true, y_pred):
+        """
+        This implementation excludes a positive proxy from denominator.
+        """
         onehot = tf.one_hot(y_true, self.n_class, True, False)
         norm_x = tf.math.l2_normalize(y_pred, axis=1)
         norm_p = tf.math.l2_normalize(self.proxies, axis=1)
@@ -43,5 +53,23 @@ class ProxyNCALoss(tf.keras.losses.Loss):
         neg = tf.math.reduce_sum(neg, axis=1)
         # negative log_softmax: log(exp(a)/sum(exp(b)))=a-log(sum(exp(b)))
         loss = -1 * (pos - tf.math.log(neg))
+        loss = tf.math.reduce_mean(loss)
+        return loss
+
+
+    def call_another_impl(self, y_true, y_pred):
+        """
+        This implementation have a positive proxy in denominator.
+        """
+        smooth_onehot = self.smooth_one_hot(y_true, self.n_class)
+        norm_x = tf.math.l2_normalize(y_pred, axis=1)
+        norm_p = tf.math.l2_normalize(self.proxies, axis=1)
+        norm_x = norm_x * self.scale_x
+        norm_p = norm_p * self.scale_p
+        dist = pairwise_distance(norm_x, norm_p)
+        dist = -1 * tf.maximum(dist, 0.)
+        loss = tf.nn.softmax(dist, axis=1) * smooth_onehot
+        loss = tf.math.reduce_sum(loss, axis=1)
+        loss = -1 * tf.math.log(loss)
         loss = tf.math.reduce_mean(loss)
         return loss
