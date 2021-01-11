@@ -3,9 +3,10 @@ config = {
     # 1. cars196: shape=(224, 224, 3)
     # 2. cub: shape=(224, 224, 3)
     # 3. sop: shape=(224, 224, 3)
+    # 4. inshop: shape=(224, 224, 3), need to download manually
     #
-    'dataset': 'cars196',
-    'model_name': 'mnist_test',
+    'dataset': 'cub',
+    'model_name': 'proxyanchor_cub',
     'batch_size' : 64,
     'shape' : [224, 224, 3],
 
