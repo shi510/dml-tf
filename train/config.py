@@ -6,8 +6,8 @@ config = {
     # 4. inshop: shape=(224, 224, 3), need to download manually
     #
     'dataset': 'cub',
-    'model_name': 'proxyanchor_cub',
-    'batch_size' : 64,
+    'model_name': 'proxynca_cub',
+    'batch_size' : 128,
     'shape' : [224, 224, 3],
 
     #
@@ -18,21 +18,23 @@ config = {
     # 4. MobileNetV3
     #
     'model' : 'InceptionV3',
-    'embedding_dim': 64,
+    'embedding_dim': 128,
 
     #
     # 1. ProxyNCA
     #
-    'loss': 'ProxyNCA',
+    'loss': 'ProxyAnchor',
 
     'loss_param':{
         'ProxyNCA':{
-            'embedding_scale': 1,
-            'proxy_scale': 8
+            'scale_x': 1,
+            'scale_p': 8,
+            'lr': 1e-1
         }
     },
 
     'eval':{
+        # linear evaluation is executed at the end of the training.
         'linear': False,
         'recall':[1, 2, 4, 8],
         # Calculating NMI is too slow.
@@ -41,13 +43,16 @@ config = {
         'NMI': False
     },
 
+    'epoch' : 50,
+
     #
     # There are two options.
-    #  1. adam
-    #  2. sgd with momentum=0.9 and nesterov=True
+    #  1. Adam
+    #  2. AdamW
+    #  3. RMSprop
+    #  4. SGD with momentum=0.9 and nesterov=True
     #
-    'optimizer' : 'adam',
-    'epoch' : 15,
+    'optimizer' : 'AdamW',
 
     #
     # initial learning rate.

@@ -1,17 +1,17 @@
+import copy
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 
 import train.input_pipeline as input_pipeline
 import train.config
-from train.callbacks import LossTensorBoard
 import net_arch.models
+from train.callbacks import LogCallback, RecallCallback, ReduceLROnPlateau
 from train.loss.proxynca import ProxyNCALoss
 from train.loss.triplet import original_triplet_loss as triplet_loss
-import evalutate.nmi as nmi
-import evalutate.linear as linear_eval
-import evalutate.recall as recall
+from train.utils import CustomModel
 
 import tensorflow as tf
-import numpy as np
+import tensorflow_addons as tfa
 
 
 def build_dataset(config):
@@ -32,7 +32,6 @@ def build_embedding_model(config):
 
     def _embedding_layer(feature):
         y = x = tf.keras.Input(feature.shape[1:])
-        y = tf.keras.layers.Dropout(rate=0.5)(y)
         y = tf.keras.layers.GlobalAveragePooling2D()(y)
         y = tf.keras.layers.Dense(config['embedding_dim'])(y)
         return tf.keras.Model(x, y, name='embeddings')(feature)
@@ -43,23 +42,32 @@ def build_embedding_model(config):
     return tf.keras.Model(x, y, name=config['model_name'])
 
 
-def build_callbacks(config):
+def build_callbacks(config, test_ds, optimizer, monitor, mode):
     callback_list = []
-    reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
-        monitor='loss', factor=0.1,
-        patience=1, min_lr=1e-4)
+    model_name = config['model_name']
+    log_dir = os.path.join('logs', model_name)
+    if test_ds is not None:
+        top_k = config['eval']['recall']
+        callback_list.append(RecallCallback(test_ds, top_k, log_dir))
+    reduce_lr_net = tf.keras.callbacks.ReduceLROnPlateau(
+        monitor=monitor, factor=0.1, verbose=1,
+        patience=5, min_lr=1e-4, mode=mode)
+    reduce_lr_proxy = ReduceLROnPlateau(
+        optimizer=optimizer,
+        monitor=monitor, factor=0.1, verbose=1,
+        patience=5, min_lr=1e-4, mode=mode)
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
         filepath='./checkpoint'+os.path.sep+config['model_name'],
         save_weights_only=False,
-        monitor='loss',
-        mode='min',
+        monitor=monitor,
+        mode=mode,
         save_best_only=True)
-    early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=3)
-    tensorboard_log = LossTensorBoard(
-        100, os.path.join('logs', config['model_name']))
+    early_stop = tf.keras.callbacks.EarlyStopping(monitor=monitor, patience=10, mode=mode)
+    tensorboard_log = LogCallback(log_dir)
 
     if not config['lr_decay']:
-        callback_list.append(reduce_lr)
+        callback_list.append(reduce_lr_net)
+        callback_list.append(reduce_lr_proxy)
     # callback_list.append(checkpoint)
     callback_list.append(early_stop)
     callback_list.append(tensorboard_log)
@@ -67,93 +75,59 @@ def build_callbacks(config):
 
 
 def build_optimizer(config):
-    # In tf-v2.3.0, Do not use tf.keras.optimizers.schedules with ReduceLR callback.
-    if config['lr_decay']:
-        lr = tf.keras.optimizers.schedules.ExponentialDecay(
-            config['lr'],
-            decay_steps=config['lr_decay_steps'],
-            decay_rate=config['lr_decay_rate'],
-            staircase=True)
-    else:
-        lr = config['lr']
-
     opt_list = {
-        'adam': 
+        'Adam': 
+            lambda lr:
             tf.keras.optimizers.Adam(learning_rate=lr),
-        'sgd':
-            tf.keras.optimizers.SGD(learning_rate=lr,
-                momentum=0.9, nesterov=True)
+        'AdamW': 
+            lambda lr:
+            tfa.optimizers.AdamW(learning_rate=lr, weight_decay=1e-4),
+        'RMSprop':
+            lambda lr:
+                tf.keras.optimizers.RMSprop(learning_rate=lr),
+        'SGD':
+            lambda lr:
+                tf.keras.optimizers.SGD(learning_rate=lr,
+                    momentum=0.9, nesterov=True)
     }
+
     if config['optimizer'] not in opt_list:
         print(config['optimizer'], 'is not support.')
         print('please select one of below.')
         print(opt_list.keys())
         exit(1)
-    return opt_list[config['optimizer']]
+    loss_param = config['loss_param'][config['loss']]
+    model_opt = opt_list[config['optimizer']](config['lr'])
+    proxy_opt = opt_list[config['optimizer']](loss_param['lr'])
+    return [model_opt, proxy_opt]
 
 
-def build_loss(config):
+def build_loss(config, n_class):
     loss_fn = None
-    loss_param = config['loss_param']
+    config = copy.deepcopy(config)
+    loss_param = config['loss_param'][config['loss']]
+    n_embedding = config['embedding_dim']
+    del(loss_param['lr'])
     if config['loss'] == 'ProxyNCA':
-        proxy_param = loss_param['ProxyNCA']
-        embedding_scale = proxy_param['embedding_scale']
-        proxy_scale = proxy_param['proxy_scale']
-        loss_fn = ProxyNCALoss(config['embedding_dim'], classes,
-            embedding_scale, proxy_scale)
+        loss_fn = ProxyNCALoss(n_embedding, n_class, **loss_param)
     else:
         raise 'The Loss -> {} is not supported.'.format(config['loss'])
-    
+
     return loss_fn
+
+
+def start_training(config):
+    train_ds, test_ds, classes = build_dataset(config)
+    net = build_embedding_model(config)
+    loss_fn = build_loss(config, classes)
+    opt_list = build_optimizer(config)
+    callbacks = build_callbacks(config, test_ds, opt_list[1], 'recall@1', 'max')
+    net.summary()
+    cm = CustomModel(net, loss_fn, opt_list[0])
+    cm.add_optimizer(opt_list[1], loss_fn.trainable_weights)
+    cm.fit(train_ds, config['epoch'], callbacks)
 
 
 if __name__ == '__main__':
     config = train.config.config
-    train_ds, test_ds, classes = build_dataset(config)
-    net = build_embedding_model(config)
-    loss_fn = build_loss(config)
-    opt = build_optimizer(config)
-    net.summary()
-
-    early_stop = tf.keras.callbacks.EarlyStopping(monitor='recall',
-        mode='max', patience=3, restore_best_weights=True)
-    early_stop.set_model(net)
-    early_stop.on_train_begin()
-    # Iterate over epochs.
-    for epoch in range(config['epoch']):
-        print('Epoch %d' % epoch)
-        early_stop.on_epoch_begin(epoch)
-        pbar = tf.keras.utils.Progbar(len(train_ds))
-        # Iterate over the batches of the dataset.
-        epoch_loss = np.zeros(1, dtype=np.float32)
-        total_iter = 0
-        for step, (x, y) in enumerate(train_ds):
-            with tf.GradientTape() as tape:
-                probs = net(x)
-                total_loss = loss_fn(y, probs)
-            epoch_loss += total_loss.numpy()
-            all_weights = net.trainable_weights + [loss_fn.proxies]
-            grads = tape.gradient(total_loss, all_weights)
-            opt.apply_gradients(zip(grads, all_weights))
-            total_iter += 1
-            pbar.update(total_iter, [('loss', total_loss.numpy())])
-        top_k = config['eval']['recall']
-        recall_top_k = recall.evaluate(net, test_ds, top_k)
-        for k, r in zip(top_k, recall_top_k):
-            print('reall @ {}: {:.2f}%'.format(k, r * 100))
-        if config['eval']['NMI']:
-        nmi_score = nmi.evaluate(net, test_ds, config['embedding_dim'], classes)
-            print('NMI      : {:.2f}%'.format(nmi_score * 100))
-        early_stop.on_epoch_end(epoch, {'recall': np.sum(recall_top_k)})
-        if net.stop_training:
-            break
-    early_stop.on_train_end()
-    # if NMI evaluation is False, then it is only executed at the end of the training.
-    if not config['eval']['NMI']:
-        nmi_score = nmi.evaluate(net, test_ds, config['embedding_dim'], classes)
-        print('NMI      : {:.2f}%'.format(nmi_score * 100))
-    if config['eval']['linear']:
-        linear_eval_opt = tf.keras.optimizers.Adam(learning_rate=1e-4)
-        linear_eval.evaluate(net, classes, train_ds, test_ds, linear_eval_opt)
-    # save best model
-    net.save('{}.h5'.format(config['model_name']), include_optimizer=False)
+    start_training(config)
