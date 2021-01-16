@@ -15,3 +15,10 @@ def pairwise_distance(A, B):
     row_norms_B = tf.reshape(row_norms_B, [1, -1])  # Row vector.
 
     return row_norms_A - 2 * tf.matmul(A, tf.transpose(B)) + row_norms_B
+
+
+def smooth_one_hot(labels, n_class, smooth_factor=0.1):
+    pos = (1. - smooth_factor)
+    neg = smooth_factor / (n_class - 1.)
+    onehot = tf.one_hot(labels, n_class, pos, neg)
+    return onehot

@@ -74,7 +74,7 @@ def make_tfdataset(name, batch_size, input_shape):
         'cars196': ('cars196', 'image', 'label', 196, ['train', 'test']),
         'cub': ('caltech_birds2011', 'image', 'label', 200, ['train', 'test']),
         'sop': ('StanfordOnlineProducts', 'image', 'class_id', 11318, ['train', 'test']),
-        'inshop': ('StanfordOnlineProducts', 'image', 'label', 3997, ['train', 'test'])
+        'inshop': ('', 'image', 'label', 3997, [])
     }
     if name not in dataset_list:
         raise 'dataset {} not supports.'.format(name)

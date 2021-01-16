@@ -1,4 +1,5 @@
 from train.loss.utils import pairwise_distance
+from train.loss.utils import smooth_one_hot
 
 import tensorflow as tf
 
@@ -22,13 +23,6 @@ class ProxyNCALoss(tf.keras.losses.Loss):
             initial_value=self.initializer((self.n_class, n_embedding)),
             trainable=True)
         self.trainable_weights = [self.proxies]
-
-
-    def smooth_one_hot(self, labels, n_class, smooth_factor=0.1):
-        pos = (1. - smooth_factor)
-        neg = smooth_factor / (n_class - 1.)
-        onehot = tf.one_hot(labels, n_class, pos, neg)
-        return onehot
 
 
     def call(self, y_true, y_pred):
@@ -61,7 +55,7 @@ class ProxyNCALoss(tf.keras.losses.Loss):
         """
         This implementation have a positive proxy in denominator.
         """
-        smooth_onehot = self.smooth_one_hot(y_true, self.n_class)
+        smooth_onehot = smooth_one_hot(y_true, self.n_class)
         norm_x = tf.math.l2_normalize(y_pred, axis=1)
         norm_p = tf.math.l2_normalize(self.proxies, axis=1)
         norm_x = norm_x * self.scale_x
