@@ -15,13 +15,33 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)
 python train/main.py
 ```
 
+## What's Different from existing github implementations?
+1. ProxyNCA Loss  
+![ProxyNCA Loss](docs/images/proxynca_loss.jpg)  
+ProxyNCA loss can be calculated by tf.nn.log_softmax.  
+But we can not use the function directly because we should seperate positive and negative proxy distances.  
+Also we should consider numerical stability of our log_softmax implementation.  
+So, We can rewrite `log_softmax=log(exp(a)/sum(exp(b)))=a-log(sum(exp(b)))`.  
+See [train/loss/proxynca.py](train/loss/proxynca.py) and [train/loss/utils.py:pairwise_distance](train/loss/utils.py).  
+
+2. ProxyAnchor Loss  
+![ProxyAnchor Loss](docs/images/proxyanchor_loss.jpg)  
+ProxyAnchor loss can be calculated by tf.math.reduce_logsumexp.  
+But we can not use the function directly as the same issues on proxyNCA Loss.  
+So, this project re-implements the reduce_logsumexp seperating positive and negative proxy distances.  
+Also, the function can be rewriten for numerical stability as below:  
+`logsumexp(x) = c + log(sum(x-c)), where c is a maximum of x.`  
+See [train/loss/proxyanchor.py](train/loss/proxyanchor.py).  
+
 ## Training Conditions
 1. Augmentation: random_flip, random_color, random_cutout  
 2. Random Crop: All images are resized by 256x256 and then random crop by 224x224.  
 3. Scale Factors: `this is very important. (Depending on your dataset size)`  
 4. All network should be pretrained by imagenet, `this is important.`  
 
-## Results of ProxyNCA On Test Set
+**SOP dataset does not converges, I'm trying to figure it out.**  
+
+## Results of `ProxyNCA` on Test Set
 |                 | CUB         | cars196     | InShop      |
 |-----------------|-------------|-------------|-------------|
 | NMI             | 73%         | 69%         | 86%         |
@@ -37,9 +57,6 @@ python train/main.py
 | Embedding Scale | 1           | 1           | 1           |
 | Weight Opt      | AdamW@1e-4  | AdamW@1e-4  | AdamW@1e-4  |
 | Proxy Opt       | AdamW@1e+0  | AdamW@1e+1  | AdamW@1e+1  |
-
-## Issues
-- SOP dataset does not converges, I'm trying to figure it out.  
 
 ## TODO LIST
 - [x] *Known as `Proxy-NCA`*, No Fuss Distance Metric Learning using Proxies, Y. Movshovitz-Attias et al., ICCV 2017
