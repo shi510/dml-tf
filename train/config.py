@@ -7,7 +7,7 @@ config = {
     #
     'dataset': 'cub',
     'model_name': 'proxynca_cub',
-    'batch_size' : 128,
+    'batch_size' : 64,
     'shape' : [224, 224, 3],
 
     #
@@ -18,24 +18,28 @@ config = {
     # 4. MobileNetV3
     #
     'model' : 'InceptionV3',
-    'embedding_dim': 128,
+    'embedding_dim': 64,
 
     #
     # 1. ProxyNCA
+    # 2. ProxyAnchor
     #
     'loss': 'ProxyAnchor',
 
     'loss_param':{
         'ProxyNCA':{
-            'scale_x': 1,
-            'scale_p': 8,
-            'lr': 1e-1
+            'scale': 32,
+            'proxy_lr': 1e-2,
+        },
+        'ProxyAnchor':{
+            'scale': 32,
+            'delta': 0.1,
+            'proxy_lr': 1e-2,
         }
     },
 
     'eval':{
-        # linear evaluation is executed at the end of the training.
-        'linear': False,
+        'metric': 'cos',
         'recall':[1, 2, 4, 8],
         # Calculating NMI is too slow.
         # (SOP dataset takes a long time)

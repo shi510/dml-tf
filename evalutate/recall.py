@@ -15,13 +15,24 @@ def calc_top_k_label(dist, label, top_k, largest=True):
 
     return top_k_label
 
+def evaluate(model, dataset, metric, top_k: list, batch_size=256, norm=True):
+    if metric =='cos':
+        metric_fn = lambda X, Y: tf.matmul(X, tf.transpose(Y))
+        largest = True
+    elif metric == 'l2':
+        metric_fn = lambda X, Y: pairwise_distance(X, Y)
+        largest = False
+    else:
+        raise 'Unsupported metric.'
 
-def evaluate(model, dataset, top_k: list, batch_size=256):
     X = []
     Y = []
     # extract all embeddings in dataset.
     for batch_x, batch_y in dataset:
-        batch_pred = model(batch_x).numpy()
+        batch_pred = model(batch_x)
+        if norm:
+            batch_pred = tf.math.l2_normalize(batch_pred, axis=1)
+        batch_pred = batch_pred.numpy()
         for x, y in zip(batch_pred, batch_y):
             X.append(x)
             Y.append(y)
@@ -33,16 +44,19 @@ def evaluate(model, dataset, top_k: list, batch_size=256):
     max_top_k = np.max(top_k)
     # calculate top_k using batched sample for memory efficiency.
     for n, batch_x in enumerate(ds):
-        dist = pairwise_distance(batch_x, X)
+        dist = metric_fn(batch_x, X)
         max_dist = tf.math.reduce_max(dist)
         # remove self distance.
         shifted_eye = np.eye(batch_x.shape[0], X.shape[0], n * batch_x.shape[0])
-        dist = dist + shifted_eye * max_dist
+        if largest:
+            dist = dist - shifted_eye * max_dist
+        else:
+            dist = dist + shifted_eye * max_dist
         # get top_k label
-        batch_top_k_label = calc_top_k_label(dist, Y, max_top_k, largest=False)
+        batch_top_k_label = calc_top_k_label(dist, Y, max_top_k, largest)
         # merge list
         P = P + batch_top_k_label
-    
+
     top_k_results = []
     for k in top_k:
         s = sum([1 for y, p in zip(Y, P) if y in p[:k]])

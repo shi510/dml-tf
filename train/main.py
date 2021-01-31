@@ -5,10 +5,11 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import train.input_pipeline as input_pipeline
 import train.config
 import net_arch.models
-from train.callbacks import LogCallback, RecallCallback, ReduceLROnPlateau
-from train.loss.proxynca import ProxyNCALoss
-from train.loss.triplet import original_triplet_loss as triplet_loss
-from train.utils import CustomModel
+from train.callbacks import LogCallback
+from train.callbacks import RecallCallback
+from train.custom_model import ProxyNCAModel
+from train.custom_model import ProxyAnchorModel
+import train.loss.utils
 
 import tensorflow as tf
 import tensorflow_addons as tfa
@@ -26,51 +27,55 @@ def build_backbone_model(config):
     return net_arch.models.get_model(config['model'], config['shape'])
 
 
-def build_embedding_model(config):
+def build_embedding_model(config, n_classes):
     y = x = tf.keras.Input(config['shape'])
     y = build_backbone_model(config)(y)
 
     def _embedding_layer(feature):
         y = x = tf.keras.Input(feature.shape[1:])
+        y = tf.keras.layers.Dropout(rate=0.3)(y)
         y = tf.keras.layers.GlobalAveragePooling2D()(y)
         y = tf.keras.layers.Dense(config['embedding_dim'])(y)
+        y = tf.keras.layers.BatchNormalization()(y)
         return tf.keras.Model(x, y, name='embeddings')(feature)
 
 
     y = _embedding_layer(y)
+    loss_param = copy.deepcopy(config['loss_param'][config['loss']])
+    loss_param['n_embeddings'] = config['embedding_dim']
+    loss_param['n_classes'] = n_classes
+    if config['loss'] == 'ProxyNCA':
+        return ProxyNCAModel(inputs=x, outputs=y, **loss_param)
+    elif config['loss'] == 'ProxyAnchor':
+        return ProxyAnchorModel(inputs=x, outputs=y, **loss_param)
+    else:
+        raise 'Not supported loss'
 
-    return tf.keras.Model(x, y, name=config['model_name'])
 
-
-def build_callbacks(config, test_ds, optimizer, monitor, mode):
+def build_callbacks(config, test_ds, monitor, mode):
+    log_dir = os.path.join('logs', config['model_name'])
     callback_list = []
-    model_name = config['model_name']
-    log_dir = os.path.join('logs', model_name)
     if test_ds is not None:
         top_k = config['eval']['recall']
-        callback_list.append(RecallCallback(test_ds, top_k, log_dir))
-    reduce_lr_net = tf.keras.callbacks.ReduceLROnPlateau(
+        metric = config['eval']['metric']
+        callback_list.append(RecallCallback(test_ds, top_k, metric, log_dir))
+    reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
         monitor=monitor, factor=0.1, verbose=1,
-        patience=5, min_lr=1e-4, mode=mode)
-    reduce_lr_proxy = ReduceLROnPlateau(
-        optimizer=optimizer,
-        monitor=monitor, factor=0.1, verbose=1,
-        patience=5, min_lr=1e-4, mode=mode)
+        patience=3, min_lr=1e-4, mode=mode)
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
-        filepath='./checkpoint'+os.path.sep+config['model_name'],
+        filepath=log_dir,
         save_weights_only=False,
         monitor=monitor,
         mode=mode,
         save_best_only=True)
-    early_stop = tf.keras.callbacks.EarlyStopping(monitor=monitor, patience=10, mode=mode)
+    early_stop = tf.keras.callbacks.EarlyStopping(monitor=monitor, patience=5, mode=mode)
     tensorboard_log = LogCallback(log_dir)
 
-    if not config['lr_decay']:
-        callback_list.append(reduce_lr_net)
-        callback_list.append(reduce_lr_proxy)
-    # callback_list.append(checkpoint)
-    callback_list.append(early_stop)
     callback_list.append(tensorboard_log)
+    if not config['lr_decay']:
+        callback_list.append(reduce_lr)
+    callback_list.append(checkpoint)
+    callback_list.append(early_stop)
     return callback_list
 
 
@@ -96,36 +101,19 @@ def build_optimizer(config):
         print('please select one of below.')
         print(opt_list.keys())
         exit(1)
-    loss_param = config['loss_param'][config['loss']]
-    model_opt = opt_list[config['optimizer']](config['lr'])
-    proxy_opt = opt_list[config['optimizer']](loss_param['lr'])
-    return [model_opt, proxy_opt]
-
-
-def build_loss(config, n_class):
-    loss_fn = None
-    config = copy.deepcopy(config)
-    loss_param = config['loss_param'][config['loss']]
-    n_embedding = config['embedding_dim']
-    del(loss_param['lr'])
-    if config['loss'] == 'ProxyNCA':
-        loss_fn = ProxyNCALoss(n_embedding, n_class, **loss_param)
-    else:
-        raise 'The Loss -> {} is not supported.'.format(config['loss'])
-
-    return loss_fn
+    return opt_list[config['optimizer']](config['lr'])
 
 
 def start_training(config):
     train_ds, test_ds, classes = build_dataset(config)
-    net = build_embedding_model(config)
-    loss_fn = build_loss(config, classes)
-    opt_list = build_optimizer(config)
-    callbacks = build_callbacks(config, test_ds, opt_list[1], 'recall@1', 'max')
+    net = build_embedding_model(config, classes)
+    opt = build_optimizer(config)
+    callbacks = build_callbacks(config, test_ds, 'recall@1', 'max')
     net.summary()
-    cm = CustomModel(net, loss_fn, opt_list[0])
-    cm.add_optimizer(opt_list[1], loss_fn.trainable_weights)
-    cm.fit(train_ds, config['epoch'], callbacks)
+    net.compile(optimizer=opt)
+    net.fit(train_ds, epochs=config['epoch'], verbose=1,
+        workers=input_pipeline.TF_AUTOTUNE,
+        callbacks=callbacks)
 
 
 if __name__ == '__main__':
