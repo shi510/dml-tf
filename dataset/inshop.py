@@ -1,8 +1,6 @@
 import argparse
 import os
 
-from dataset.dataset_wrapper import DatasetWrapper
-
 import tensorflow as tf
 
 
@@ -50,7 +48,6 @@ def _parse_list_file(file_path):
         path = sp[0]
         is_train = sp[2]
         if is_train == 'train':
-            img_id = None
             if sp[1] in train_label_db:
                 img_id = train_label_db[sp[1]]
             else:
@@ -98,7 +95,7 @@ def load_tfrecord(train_file='inshop_train.tfrecord', test_file='inshop_test.tfr
 
     train_ds = train_ds.map(_read_tfrecord)
     test_ds = test_ds.map(_read_tfrecord)
-    return DatasetWrapper(train_ds, 25882), DatasetWrapper(test_ds, 26830)
+    return train_ds, test_ds
 
 
 if __name__ == '__main__':
