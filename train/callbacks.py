@@ -1,9 +1,4 @@
-import os
-
 import tensorflow as tf
-from tensorflow.python.platform import tf_logging as logging
-from tensorflow.python.keras import backend as K
-import numpy as np
 
 import evalutate.recall as recall
 
@@ -52,5 +47,6 @@ class RecallCallback(tf.keras.callbacks.Callback):
                     name = 'recall@' + str(name)
                     value *= 100
                     tf.summary.scalar(str(name), value, step=epoch)
-                    logs[str(name)] = value
+                    logs[name] = value
+                    print('{}: {}'.format(name, value))
                 self.writer.flush()
