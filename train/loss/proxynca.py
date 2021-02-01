@@ -1,6 +1,3 @@
-from train.loss.utils import pairwise_distance
-from train.loss.utils import smooth_one_hot
-
 import tensorflow as tf
 
 """
@@ -17,7 +14,7 @@ class ProxyNCALoss(tf.keras.losses.Loss):
         # Training convergence is sometimes slow, starting with low recall rate.
         #  - It may be due to initialization of proxy vectors.
         #  - It is better to use orthogonal initializer than random normal initializer.
-        self.initializer = tf.keras.initializers.Orthogonal()
+        self.initializer = tf.keras.initializers.RandomNormal(0., 1.)
         self.proxies = tf.Variable(name='proxies',
             initial_value=self.initializer((self.n_class, n_embedding)),
             trainable=True)

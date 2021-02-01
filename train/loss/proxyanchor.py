@@ -4,8 +4,8 @@ import tensorflow as tf
 @tf.function
 def where_logsumexp(condition, x, axis):
     """
-    numerical stable logsumexp applied only True condition.
-    logsumexp(x) = c + log(sum(exp(x-c))), where c is a maximum along with the axis.
+    numerical stable logsumexp applied to true condition only.
+    logsumexp(x) = c + log(sum(exp(x-c))), where c is a maximum on the axis.
     """
     filtered = tf.stop_gradient(
         tf.where(condition, x, tf.zeros_like(x)))
@@ -34,7 +34,7 @@ class ProxyAnchorLoss(tf.keras.losses.Loss):
         self.n_class = n_class
         self.scale = scale
         self.delta = delta
-        self.initializer = tf.keras.initializers.Orthogonal()
+        self.initializer = tf.keras.initializers.RandomNormal(0., 1.)
         self.proxies = tf.Variable(name='proxies',
             initial_value=self.initializer((self.n_class, n_embedding)),
             trainable=True)

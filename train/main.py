@@ -55,10 +55,9 @@ def build_embedding_model(config, n_classes):
 def build_callbacks(config, test_ds, monitor, mode):
     log_dir = os.path.join('logs', config['model_name'])
     callback_list = []
-    if test_ds is not None:
-        top_k = config['eval']['recall']
-        metric = config['eval']['metric']
-        callback_list.append(RecallCallback(test_ds, top_k, metric, log_dir))
+    top_k = config['eval']['recall']
+    metric = config['eval']['metric']
+    test_recall = RecallCallback(test_ds, top_k, metric, log_dir)
     reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
         monitor=monitor, factor=0.1, verbose=1,
         patience=3, min_lr=1e-4, mode=mode)
@@ -68,15 +67,17 @@ def build_callbacks(config, test_ds, monitor, mode):
         monitor=monitor,
         mode=mode,
         save_best_only=True)
-    early_stop = tf.keras.callbacks.EarlyStopping(monitor=monitor, patience=5, mode=mode)
+    early_stop = tf.keras.callbacks.EarlyStopping(
+        monitor=monitor, patience=5, mode=mode)
     tensorboard_log = LogCallback(log_dir)
 
+    callback_list.append(test_recall)
     callback_list.append(tensorboard_log)
     if not config['lr_decay']:
         callback_list.append(reduce_lr)
-    callback_list.append(checkpoint)
     callback_list.append(early_stop)
-    return callback_list
+    callback_list.append(checkpoint)
+    return callback_list, early_stop
 
 
 def build_optimizer(config):
@@ -104,17 +105,29 @@ def build_optimizer(config):
     return opt_list[config['optimizer']](config['lr'])
 
 
+def remove_subclassing_keras_model(model):
+    y = x = model.layers[0].input
+    for l in model.layers[1:]:
+        y = l(y)
+    return tf.keras.Model(x, y, name=model.name)
+
+
 def start_training(config):
     train_ds, test_ds, classes = build_dataset(config)
     net = build_embedding_model(config, classes)
     opt = build_optimizer(config)
-    callbacks = build_callbacks(config, test_ds, 'recall@1', 'max')
+    callbacks, early_stop = build_callbacks(config, test_ds, 'recall@1', 'max')
     net.summary()
     net.compile(optimizer=opt)
     net.fit(train_ds, epochs=config['epoch'], verbose=1,
         workers=input_pipeline.TF_AUTOTUNE,
         callbacks=callbacks)
+    if early_stop.best_weights is not None:
+        net.set_weights(early_stop.best_weights)
+    net = remove_subclassing_keras_model(net)
+    net.save('{}.h5'.format(config['model_name']), include_optimizer=False)
 
+import itertools
 
 if __name__ == '__main__':
     config = train.config.config
