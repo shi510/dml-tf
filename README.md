@@ -1,5 +1,8 @@
 # dml-tf
-distance metric learning, tf2 implementation.  
+Distance Metric Learning, TensorFlow v2 implementation.  
+This project includes:  
+1. ProxyNCA  
+2. ProxyAnchor  
 
 ## Python Packages
 1. tensorflow-v2.4.0  
@@ -21,16 +24,16 @@ python train/main.py
 ProxyNCA loss can be calculated by tf.nn.log_softmax.  
 But we can not use the function directly because we should seperate positive and negative proxy distances.  
 Also we should consider numerical stability of our log_softmax implementation.  
-So, We can rewrite `log_softmax=log(exp(a)/sum(exp(b)))=a-log(sum(exp(b)))`.  
-See [train/loss/proxynca.py](train/loss/proxynca.py) and [train/loss/utils.py:pairwise_distance](train/loss/utils.py).  
+So, we can rewrite `log_softmax=log(exp(a)/sum(exp(b)))=a-log(sum(exp(b)))`.  
+See [train/loss/proxynca.py](train/loss/proxynca.py).  
 
 2. ProxyAnchor Loss  
 ![ProxyAnchor Loss](docs/images/proxyanchor_loss.jpg)  
 ProxyAnchor loss can be calculated by tf.math.reduce_logsumexp.  
-But we can not use the function directly as the same issues on proxyNCA Loss.  
+As the same issues on proxyNCA Loss, we can not use the function directly.  
 So, this project re-implements the reduce_logsumexp seperating positive and negative proxy distances.  
-Also, the function can be rewriten for numerical stability as below:  
-`logsumexp(x) = c + log(sum(x-c)), where c is a maximum of x.`  
+The function can be rewriten as below for numerical stability:  
+`logsumexp(x) = c + log(sum(exp(x-c))), where c is a maximum of x.`  
 See [train/loss/proxyanchor.py](train/loss/proxyanchor.py).  
 
 ## Training Conditions
@@ -39,31 +42,47 @@ See [train/loss/proxyanchor.py](train/loss/proxyanchor.py).
 3. Scale Factors: `this is very important. (Depending on your dataset size)`  
 4. All network should be pretrained by imagenet, `this is important.`  
 
-**SOP dataset does not converges, I'm trying to figure it out.**  
-
 ## Results of `ProxyNCA` on Test Set
+|                 | CUB         | cars196     | InShop      | SOP         |
+|-----------------|-------------|-------------|-------------|-------------|
+| NMI             | 73%         | 70%         | 87%         | 88%         |
+| Recall @ 1      | 71%         | 81%         | 83%         | 69%         |
+| Recall @ 2      | 78%         | 86%         | 88%         | 74%         |
+| Recall @ 4      | 82%         | 89%         | 91%         | 79%         |
+| Recall @ 8      | 85%         | 91%         | 94%         | 83%         |
+| Epoch           | 19          | 18          | 25          | 16          |
+| Arch.           | InceptionV3 | InceptionV3 | InceptionV3 | InceptionV3 |
+| Batch Size      | 64          | 64          | 64          | 64          |
+| Embedding Size  | 64          | 64          | 64          | 64          |
+| Scale           | 32          | 32          | 32          | 32          |
+| Weight Opt      | AdamW@1e-4  | AdamW@1e-4  | AdamW@1e-4  | AdamW@1e-4  |
+| Proxy Opt       | AdamW@1e-2  | AdamW@1e-2  | AdamW@1e-2  | AdamW@1e-2  |
+
+## Results of `ProxyAnchor` on Test Set
 |                 | CUB         | cars196     | InShop      |
 |-----------------|-------------|-------------|-------------|
-| NMI             | 73%         | 69%         | 86%         |
-| Recall @ 1      | 65%         | 76%         | 71%         |
-| Recall @ 2      | 73%         | 83%         | 79%         |
-| Recall @ 4      | 79%         | 87%         | 85%         |
-| Recall @ 8      | 85%         | 91%         | 89%         |
-| Epoch           | 13          | 16          | 14          |
+| NMI             | 71%         | 70%         | 87%         |
+| Recall @ 1      | 71%         | 82%         | 81%         |
+| Recall @ 2      | 78%         | 86%         | 87%         |
+| Recall @ 4      | 82%         | 89%         | 91%         |
+| Recall @ 8      | 85%         | 90%         | 94%         |
+| Epoch           | 20          | 18          | 15          |
 | Arch.           | InceptionV3 | InceptionV3 | InceptionV3 |
 | Batch Size      | 64          | 64          | 64          |
 | Embedding Size  | 64          | 64          | 64          |
-| Proxy Scale     | 8           | 8           | 8           |
-| Embedding Scale | 1           | 1           | 1           |
+| Scale           | 32          | 32          | 32          |
 | Weight Opt      | AdamW@1e-4  | AdamW@1e-4  | AdamW@1e-4  |
-| Proxy Opt       | AdamW@1e+0  | AdamW@1e+1  | AdamW@1e+1  |
+| Proxy Opt       | AdamW@1e-2  | AdamW@1e-2  | AdamW@1e-2  |
+
+**ProxyAnchor is slightly better or worse sometimes than ProxyNCA.**  
+**I'm trying to find out that reason.**  
 
 ## TODO LIST
 - [x] *Known as `Proxy-NCA`*, No Fuss Distance Metric Learning using Proxies, Y. Movshovitz-Attias et al., ICCV 2017
 - [ ] Correcting the Triplet Selection Bias for Triplet Loss, B. Yu et al., ECCV 2018
 - [ ] SoftTriple Loss: Deep Metric Learning Without Triplet Sampling, Q. Qian et al., ICCV 2019
 - [ ] Multi-Similarity Loss with General Pair Weighting for Deep Metric Learning, X. Wang et at., CVPR 2019
-- [ ] Proxy Anchor Loss for Deep Metric Learning, S. Kim et al., CVPR 2020
+- [x] Proxy Anchor Loss for Deep Metric Learning, S. Kim et al., CVPR 2020
 - [ ] ProxyNCA++: Revisiting and Revitalizing Proxy Neighborhood Component Analysis, E. W. Teh et al., ECCV 2020
 
 ## References
