@@ -1,7 +1,7 @@
 # dml-tf
 Distance Metric Learning, TensorFlow v2 implementation.  
 This project includes:  
-1. ProxyNCA  
+1. ProxyNCA (The implementation in this repository is more stable and produces better results than original paper.)  
 2. ProxyAnchor  
 
 ## Python Packages
