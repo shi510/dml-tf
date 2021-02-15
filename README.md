@@ -19,15 +19,48 @@ python train/main.py
 ```
 
 ## What's Different from existing github implementations?
-1. ProxyNCA Loss  
+
+1. Additional Loss on Proxy Vector (Orthogonal Loss)  
+The additional loss regularizes that all proxies are perpendicular to each other.  
+It converges faster when this orthogonal loss is added.  
+See [train/loss/utils.py](train/loss/utils.py) and [train/custom_model.py](train/custom_model.py).  
+The orthogonal loss can be writen for simplicity as below:  
+```python
+self_dist = matmul(proxies, proxies.T)
+ortho_loss = pairwise_distance(self_dist, I) # where I is an identity matrix.
+ortho_loss = mean(ortho_loss) / 2. # remove the other triangular part.
+total_loss = proxy_loss + ortho_loss * λ # where the λ is [0, 1].
+```
+But it need to implement cutom operator in efficient way because of memory usage when the number of proxies is large.  
+The sum_uppertri_square_dot(P) is same with sum(uppertri(square(matmul(P, P^T)))), but excluding diagonal part.  
+The diag_part_dot(P) is same with diag_part(matmul(P, P^T)).  
+```python
+uppertri_sum = sum_uppertri_square_dot(P)
+diag = diag_part_dot(P)
+diag_sum = sum(square(1. - diag))
+ortho_loss = uppertri_sum + diag_sum
+total_loss = proxy_loss + ortho_loss * λ
+```
+See the comparisons on varying in λ (batch_size=64, embedding_dims=64, x-axis is epoch).  
+The biggest gap is about 10%.  
+
+![comp_anchor_topk1](docs/images/comp_anchor_topk1.jpg)
+![comp_anchor_nca_topk1](docs/images/comp_anchor_nca_topk1.jpg)
+
+Orthogonality between each proxies is close to zero (non diagonal part) as epoch and lambda increase.  
+
+![heatmap_varying_lambda](docs/images/heatmap_varying_lambda_inshop.jpg)
+![heatmap_varying_epoch](docs/images/heatmap_varying_epoch_inshop.jpg)
+
+2. ProxyNCA Loss  
 ![ProxyNCA Loss](docs/images/proxynca_loss.jpg)  
 ProxyNCA loss can be calculated by tf.nn.log_softmax.  
 But we can not use the function directly because we should seperate positive and negative proxy distances.  
 Also we should consider numerical stability of our log_softmax implementation.  
-So, we can rewrite `log_softmax=log(exp(a)/sum(exp(b)))=a-log(sum(exp(b)))`.  
+So, we can rewrite `negative log_softmax=-log(exp(a)/sum(exp(b)))=log(sum(exp(b)))-a`.  
 See [train/loss/proxynca.py](train/loss/proxynca.py).  
 
-2. ProxyAnchor Loss  
+3. ProxyAnchor Loss  
 ![ProxyAnchor Loss](docs/images/proxyanchor_loss.jpg)  
 ProxyAnchor loss can be calculated by tf.math.reduce_logsumexp.  
 As the same issues on proxyNCA Loss, we can not use the function directly.  
@@ -73,9 +106,6 @@ See [train/loss/proxyanchor.py](train/loss/proxyanchor.py).
 | Scale           | 32          | 32          | 32          |
 | Weight Opt      | AdamW@1e-4  | AdamW@1e-4  | AdamW@1e-4  |
 | Proxy Opt       | AdamW@1e-2  | AdamW@1e-2  | AdamW@1e-2  |
-
-**ProxyAnchor is slightly better or worse sometimes than ProxyNCA.**  
-**I'm trying to find out that reason.**  
 
 ## TODO LIST
 - [x] *Known as `Proxy-NCA`*, No Fuss Distance Metric Learning using Proxies, Y. Movshovitz-Attias et al., ICCV 2017

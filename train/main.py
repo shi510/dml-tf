@@ -5,8 +5,9 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import train.input_pipeline as input_pipeline
 import train.config
 import net_arch.models
-from train.callbacks import LogCallback
+from train.callbacks import ConfusionMatrixCallback, LogCallback
 from train.callbacks import RecallCallback
+from train.callbacks import NMICallback
 from train.custom_model import ProxyNCAModel
 from train.custom_model import ProxyAnchorModel
 import train.loss.utils
@@ -16,11 +17,11 @@ import tensorflow_addons as tfa
 
 
 def build_dataset(config):
-    train_ds, test_ds, classes = input_pipeline.make_tfdataset(
+    train_ds, train_classes, test_ds, test_classes = input_pipeline.make_tfdataset(
         config['dataset'],
         config['batch_size'],
         config['shape'])
-    return train_ds, test_ds, classes
+    return train_ds, train_classes, test_ds, test_classes
 
 
 def build_backbone_model(config):
@@ -52,7 +53,7 @@ def build_embedding_model(config, n_classes):
         raise 'Not supported loss'
 
 
-def build_callbacks(config, test_ds, monitor, mode):
+def build_callbacks(config, model, test_ds, monitor, mode):
     log_dir = os.path.join('logs', config['model_name'])
     callback_list = []
     top_k = config['eval']['recall']
@@ -70,6 +71,7 @@ def build_callbacks(config, test_ds, monitor, mode):
     early_stop = tf.keras.callbacks.EarlyStopping(
         monitor=monitor, patience=5, mode=mode)
     tensorboard_log = LogCallback(log_dir)
+    cm = ConfusionMatrixCallback(model.proxy_loss.proxies, log_dir)
 
     callback_list.append(test_recall)
     callback_list.append(tensorboard_log)
@@ -77,6 +79,7 @@ def build_callbacks(config, test_ds, monitor, mode):
         callback_list.append(reduce_lr)
     callback_list.append(early_stop)
     callback_list.append(checkpoint)
+    callback_list.append(cm)
     return callback_list, early_stop
 
 
@@ -113,10 +116,10 @@ def remove_subclassing_keras_model(model):
 
 
 def start_training(config):
-    train_ds, test_ds, classes = build_dataset(config)
-    net = build_embedding_model(config, classes)
+    train_ds, train_classes, test_ds, test_classes = build_dataset(config)
+    net = build_embedding_model(config, train_classes)
     opt = build_optimizer(config)
-    callbacks, early_stop = build_callbacks(config, test_ds, 'recall@1', 'max')
+    callbacks, early_stop = build_callbacks(config, net, test_ds, 'recall@1', 'max')
     net.summary()
     net.compile(optimizer=opt)
     net.fit(train_ds, epochs=config['epoch'], verbose=1,
@@ -124,10 +127,13 @@ def start_training(config):
         callbacks=callbacks)
     if early_stop.best_weights is not None:
         net.set_weights(early_stop.best_weights)
+    if config['eval']['NMI']:
+        test_nmi = NMICallback(test_ds, test_classes,
+            os.path.join('logs', config['model_name']))
+        test_nmi.set_model(net)
+        test_nmi.on_train_end()
     net = remove_subclassing_keras_model(net)
     net.save('{}.h5'.format(config['model_name']), include_optimizer=False)
-
-import itertools
 
 if __name__ == '__main__':
     config = train.config.config

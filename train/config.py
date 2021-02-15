@@ -28,22 +28,23 @@ config = {
 
     'loss_param':{
         'ProxyNCA':{
-            'scale': 32,
+            'scale': 64,
             'proxy_lr': 1e-2,
+            'ortho_weight': 1e-1
         },
         'ProxyAnchor':{
-            'scale': 32,
+            'scale': 64,
             'delta': 0.1,
             'proxy_lr': 1e-2,
+            'ortho_weight': 1e-1
         }
     },
 
     'eval':{
         'metric': 'cos',
         'recall':[1, 2, 4, 8],
-        # Calculating NMI is too slow.
-        # (SOP dataset takes a long time)
-        # If False, it is only executed at the end of the training.
+        # Calculating NMI takes a long time depending on the dataset size.
+        # If True, it is evaluated at the end of the training.
         'NMI': False
     },
 

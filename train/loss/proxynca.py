@@ -5,23 +5,18 @@ All the code below is referenced from :
 https://github.com/dichotomies/proxy-nca
 """
 
-class ProxyNCALoss(tf.keras.losses.Loss):
+class ProxyNCALoss:
 
-    def __init__(self, n_embedding, n_class, scale=32, **kwargs):
-        super(ProxyNCALoss, self).__init__(**kwargs)
+    def __init__(self, n_embedding, n_class, scale=32):
         self.n_class = n_class
         self.scale = scale
-        # Training convergence is sometimes slow, starting with low recall rate.
-        #  - It may be due to initialization of proxy vectors.
-        #  - It is better to use orthogonal initializer than random normal initializer.
-        self.initializer = tf.keras.initializers.RandomNormal(0., 1.)
+        self.initializer = tf.keras.initializers.HeNormal()
         self.proxies = tf.Variable(name='proxies',
             initial_value=self.initializer((self.n_class, n_embedding)),
             trainable=True)
         self.trainable_weights = [self.proxies]
 
-
-    def call(self, y_true, y_pred):
+    def __call__(self, y_true, y_pred):
         """
         This implementation excludes a positive proxy from denominator.
         """
@@ -38,7 +33,7 @@ class ProxyNCALoss(tf.keras.losses.Loss):
         # select all distance summation between example and negative proxy.
         neg = tf.where(onehot, tf.zeros_like(dist), tf.math.exp(dist))
         neg = tf.math.reduce_sum(neg, axis=1)
-        # negative log_softmax: log(exp(a)/sum(exp(b)))=a-log(sum(exp(b)))
-        loss = -1 * (pos - tf.math.log(neg))
+        # negative log_softmax: -log(exp(a)/sum(exp(b))) = log(sum(exp(b))) - a
+        loss = tf.math.log(neg) - pos
         loss = tf.math.reduce_mean(loss)
-        return loss
+        return loss, tf.math.reduce_mean(pos), tf.math.reduce_mean(neg)

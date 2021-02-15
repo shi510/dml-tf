@@ -1,91 +1,71 @@
 import os
 import itertools
+import io
 
 import numpy as np
 import tensorflow as tf
 from tensorboard.plugins import projector
+import matplotlib.pyplot as plt
 
 
-class CallbackList(object):
+def plot_confusion_matrix(cm):
+    figure = plt.figure(figsize=(8, 8))
+    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+    plt.title("Confusion matrix")
+    plt.colorbar()
+    plt.tight_layout()
+    return figure
 
-    def __init__(self, model, callbacks):
-        self.model = model
-        self.callbacks = callbacks
-        for cb in self.callbacks:
-            cb.set_model(self.model)
-
-
-    def on_batch_begin(self, batch, logs=None):
-        for cb in self.callbacks:
-            cb.on_batch_begin(batch, logs)
-
-
-    def on_batch_end(self, batch, logs=None):
-        for cb in self.callbacks:
-            cb.on_batch_end(batch, logs)
-
-
-    def on_epoch_begin(self, epoch, logs=None):
-        for cb in self.callbacks:
-            cb.on_epoch_begin(epoch, logs)
-
-
-    def on_epoch_end(self, epoch, logs=None):
-        for cb in self.callbacks:
-            cb.on_epoch_end(epoch, logs)
+def plot_to_image(figure):
+    """Converts the matplotlib plot specified by 'figure' to a PNG image and
+    returns it. The supplied figure is closed and inaccessible after this call."""
+    # Save the plot to a PNG in memory.
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    # Closing the figure prevents it from being displayed directly inside
+    # the notebook.
+    plt.close(figure)
+    buf.seek(0)
+    # Convert PNG buffer to TF image
+    image = tf.image.decode_png(buf.getvalue(), channels=4)
+    # Add the batch dimension
+    image = tf.expand_dims(image, 0)
+    return image
 
 
-    def on_train_begin(self, logs=None):
-        for cb in self.callbacks:
-            cb.on_train_begin(logs)
+def visualize_embeddings(model_path, dataset, log_dir):
+    model = tf.keras.models.load_model(model_path)
 
+    labels = []
+    embeddings = []
+    for n, (x, y) in enumerate(dataset):
+        pred_y = model(x).numpy()
+        for m in pred_y:
+            embeddings.append(n)
+        for m in y:
+            labels.append(m)
+    # Set up a logs directory, so Tensorboard knows where to look for files
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
 
-    def on_train_end(self, logs=None):
-        for cb in self.callbacks:
-            cb.on_train_end(logs)
+    # Save Labels separately on a line-by-line manner.
+    with open(os.path.join(log_dir, 'metadata.tsv'), "w") as f:
+        for l in labels:
+            f.write("{}\n".format(l))
 
+    # Save the weights we want to analyse as a variable. Note that the first
+    # value represents any unknown word, which is not in the metadata, so
+    # we will remove that value.
+    embedding_array = np.array(embeddings)
+    embedding = tf.Variable(embedding_array, name='embedding')
+    # Create a checkpoint from embedding, the filename and key are
+    # name of the tensor.
+    checkpoint = tf.train.Checkpoint(embedding=embedding)
+    checkpoint.save(os.path.join(log_dir, "embedding.ckpt"))
 
-class CustomModel(object):
-    
-    def __init__(self, model, loss, optimizer):
-        self.model = model
-        self.trainable_weights = [self.model.trainable_weights]
-        self.criterion = loss
-        self.optmizers = [optimizer]
-        self.model.optimizer = optimizer
-
-
-    def add_optimizer(self, optimizer, variables):
-        self.optmizers.append(optimizer)
-        if not isinstance(variables, list):
-            raise 'variables should be a list type.'
-        self.trainable_weights.append(variables)
-
-
-    def fit(self, train_ds, epoch, callbacks):
-        callback_list = CallbackList(self.model, callbacks)
-        callback_list.on_train_begin()
-        for n in range(epoch):
-            print('Epoch %d' % n)
-            callback_list.on_epoch_begin(n)
-            pbar = tf.keras.utils.Progbar(len(train_ds))
-            logs = {}
-            # Iterate over batches
-            for step, (x, y_true) in enumerate(train_ds):
-                callback_list.on_batch_begin(step)
-                with tf.GradientTape() as tape:
-                    y_pred = self.model(x)
-                    step_loss = self.criterion(y_true, y_pred)
-                all_weights = list(itertools.chain.from_iterable(self.trainable_weights))
-                grads = tape.gradient(step_loss, all_weights)
-                for opt, weights in zip(self.optmizers, self.trainable_weights):
-                    size = len(weights)
-                    opt.apply_gradients(zip(grads[:size], weights))
-                    grads = grads[size:]
-                logs['loss'] = step_loss.numpy()
-                pbar.update(step+1, [(k, logs[k]) for k in logs])
-                callback_list.on_batch_begin(step, logs)
-            callback_list.on_epoch_end(n, logs)
-            if self.model.stop_training:
-                break
-        callback_list.on_train_end()
+    # Set up config
+    config = projector.ProjectorConfig()
+    embedding = config.embeddings.add()
+    embedding.tensor_name = "embedding/.ATTRIBUTES/VARIABLE_VALUE"
+    embedding.metadata_path = 'metadata.tsv'
+    projector.visualize_embeddings(log_dir, config)

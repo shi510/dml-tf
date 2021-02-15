@@ -26,9 +26,6 @@ def _pairwise_distances(embeddings, squared=False):
     # shape (batch_size, batch_size)
     distances = pairwise_distance(embeddings, embeddings)
 
-    # Because of computation errors, some distances might be negative so we put everything >= 0.0
-    distances = tf.maximum(distances, 0.0)
-
     if not squared:
         # Because the gradient of sqrt is infinite when distances == 0.0 (ex: on the diagonal)
         # we need to add a small epsilon where distances == 0.0
